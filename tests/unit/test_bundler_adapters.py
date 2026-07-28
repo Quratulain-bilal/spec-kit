@@ -193,11 +193,10 @@ def test_validate_remote_url_rejects_malformed_url_cleanly(url):
 
 def test_http_fetch_rejects_oversized_response(monkeypatch):
     """Regression: the catalog fetcher must use read_response_limited with
-    MAX_JSON_METADATA_BYTES, not unbounded resp.read()."""
+    MAX_JSON_CATALOG_BYTES, not unbounded resp.read()."""
     from specify_cli.bundler.services import adapters as adapters_module
-    from specify_cli._download_security import MAX_JSON_METADATA_BYTES
 
-    monkeypatch.setattr(adapters_module, "MAX_JSON_METADATA_BYTES", 32)
+    monkeypatch.setattr(adapters_module, "MAX_JSON_CATALOG_BYTES", 32)
 
     class _OversizedResponse:
         def __init__(self):
@@ -214,13 +213,11 @@ def test_http_fetch_rejects_oversized_response(monkeypatch):
             return "https://example.com/c.json"
 
         def read(self, size: int = -1) -> bytes:
-            if size == -1:
-                chunk = self._body[self._offset:]
-                self._offset = len(self._body)
-            else:
-                chunk = self._body[self._offset:self._offset + size]
-                self._offset += len(chunk)
-            return chunk
+            if size < 0:
+                size = len(self._body) - self._offset
+            start = self._offset
+            self._offset = min(len(self._body), self._offset + size)
+            return self._body[start:self._offset]
 
     def fake_open_url(url, timeout=10, extra_headers=None, redirect_validator=None):
         return _OversizedResponse()
