@@ -189,3 +189,44 @@ def test_validate_remote_url_rejects_malformed_url_cleanly(url):
     caller. Bundler sibling of #3369."""
     with pytest.raises(BundlerError):
         adapters._validate_remote_url("team", url)
+
+
+def test_http_fetch_rejects_oversized_response(monkeypatch):
+    """Regression: the catalog fetcher must use read_response_limited with
+    MAX_JSON_METADATA_BYTES, not unbounded resp.read()."""
+    from specify_cli.bundler.services import adapters as adapters_module
+    from specify_cli._download_security import MAX_JSON_METADATA_BYTES
+
+    monkeypatch.setattr(adapters_module, "MAX_JSON_METADATA_BYTES", 32)
+
+    class _OversizedResponse:
+        def __init__(self):
+            self._body = b"x" * 64
+            self._offset = 0
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *exc) -> bool:
+            return False
+
+        def geturl(self) -> str:
+            return "https://example.com/c.json"
+
+        def read(self, size: int = -1) -> bytes:
+            if size == -1:
+                chunk = self._body[self._offset:]
+                self._offset = len(self._body)
+            else:
+                chunk = self._body[self._offset:self._offset + size]
+                self._offset += len(chunk)
+            return chunk
+
+    def fake_open_url(url, timeout=10, extra_headers=None, redirect_validator=None):
+        return _OversizedResponse()
+
+    monkeypatch.setattr("specify_cli.authentication.http.open_url", fake_open_url)
+
+    fetcher = adapters.make_catalog_fetcher(allow_network=True)
+    with pytest.raises(BundlerError, match="exceeds maximum size"):
+        fetcher(_source("https://example.com/c.json"))
