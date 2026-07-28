@@ -365,6 +365,69 @@ def test_python_mtime_fallback_finds_nested_plan_matching_bash(tmp_path: Path) -
 
 
 @requires_posix_bash
+def test_python_mtime_fallback_skips_symlinked_plan_matching_bash(
+    tmp_path: Path,
+) -> None:
+    # A symlinked plan.md is the reachable escape: rglob() does not descend
+    # into symlinked *directories*, but it does yield a symlinked *file*.
+    # relative_to() is lexical, so without resolving first the out-of-project
+    # target is reported as specs/001-link/plan.md -- an in-project-looking
+    # path for a file outside the tree. The Bash twin resolves before the
+    # containment check; this locks the Python port to the same behaviour.
+    repo_a, repo_b = twin_projects(tmp_path, context_file="AGENTS.md")
+    for repo in (repo_a, repo_b):
+        outside = repo.parent / f"outside-{repo.name}"
+        outside.mkdir(parents=True, exist_ok=True)
+        (outside / "plan.md").write_text("# plan\n", encoding="utf-8")
+        linked = repo / "specs" / "001-link"
+        linked.mkdir(parents=True, exist_ok=True)
+        (linked / "plan.md").symlink_to(outside / "plan.md")
+        # Sanity: rglob yields the symlinked file, so the guard is reachable.
+        assert (linked / "plan.md").is_file()
+
+    bash = run_bash(repo_a)
+    py = run_python(repo_b)
+
+    assert_parity(bash, py, repo_a, repo_b)
+    content = (repo_b / "AGENTS.md").read_bytes()
+    assert content == (repo_a / "AGENTS.md").read_bytes()
+    assert b"\nat " not in content
+
+
+@requires_posix_bash
+def test_python_mtime_fallback_prefers_contained_plan_over_newer_symlink(
+    tmp_path: Path,
+) -> None:
+    # An escaping candidate must be skipped, not blank the result: filtering
+    # happens before "take the newest". With a newer symlinked plan and an
+    # older in-project plan, both ports must report the in-project one.
+    repo_a, repo_b = twin_projects(tmp_path, context_file="AGENTS.md")
+    now = time.time()
+    for repo in (repo_a, repo_b):
+        inside = repo / "specs" / "001-real" / "plan.md"
+        inside.parent.mkdir(parents=True, exist_ok=True)
+        inside.write_text("# plan\n", encoding="utf-8")
+        os.utime(inside, (now - 60, now - 60))
+
+        outside = repo.parent / f"newer-{repo.name}"
+        outside.mkdir(parents=True, exist_ok=True)
+        newer = outside / "plan.md"
+        newer.write_text("# plan\n", encoding="utf-8")
+        os.utime(newer, (now, now))
+        linked = repo / "specs" / "002-link"
+        linked.mkdir(parents=True, exist_ok=True)
+        (linked / "plan.md").symlink_to(newer)
+
+    bash = run_bash(repo_a)
+    py = run_python(repo_b)
+
+    assert_parity(bash, py, repo_a, repo_b)
+    content = (repo_b / "AGENTS.md").read_bytes()
+    assert content == (repo_a / "AGENTS.md").read_bytes()
+    assert b"at specs/001-real/plan.md" in content
+
+
+@requires_posix_bash
 def test_python_prefers_feature_json_over_mtime_matching_bash(tmp_path: Path) -> None:
     repo_a, repo_b = twin_projects(tmp_path, context_file="AGENTS.md")
     now = time.time()

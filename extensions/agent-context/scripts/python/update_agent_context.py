@@ -173,16 +173,28 @@ def _resolve_plan_path(project_root: str) -> str:
 
     if not plan_path:
         root = Path(project_root).resolve()
-        plans = sorted(
-            (root / "specs").rglob("plan.md"),
-            key=lambda p: p.stat().st_mtime,
-            reverse=True,
-        )
-        if plans:
+
+        def _resolved_rel(p: Path) -> Path | None:
+            # Resolve symlinks before checking containment: relative_to() is
+            # lexical and would otherwise accept a plan reached through a specs/
+            # symlink that points outside the project, emitting an
+            # in-project-looking path for an out-of-project file.
             try:
-                plan_path = plans[0].relative_to(root).as_posix()
-            except ValueError:
-                plan_path = ""
+                return p.resolve().relative_to(root)
+            except (OSError, ValueError):
+                return None
+
+        # Filter first, then take the newest of what remains, so an escaping
+        # candidate is skipped rather than blanking the result. Mirrors the
+        # bash twin.
+        candidates = []
+        for p in (root / "specs").rglob("plan.md"):
+            rel = _resolved_rel(p)
+            if rel is not None:
+                candidates.append((p, rel))
+        candidates.sort(key=lambda pr: pr[0].stat().st_mtime, reverse=True)
+        if candidates:
+            plan_path = candidates[0][1].as_posix()
     return plan_path
 
 
