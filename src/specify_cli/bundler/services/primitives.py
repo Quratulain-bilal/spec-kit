@@ -213,8 +213,7 @@ class _PresetKindManager:
             )
         finally:
             with contextlib.suppress(Exception):
-                if zip_path.exists():
-                    zip_path.unlink()
+                zip_path.unlink(missing_ok=True)
 
     def remove(self, component: ComponentRef) -> None:
         try:
@@ -298,8 +297,7 @@ class _ExtensionKindManager:
             )
         finally:
             with contextlib.suppress(Exception):
-                if zip_path.exists():
-                    zip_path.unlink()
+                zip_path.unlink(missing_ok=True)
 
     def remove(self, component: ComponentRef) -> None:
         try:

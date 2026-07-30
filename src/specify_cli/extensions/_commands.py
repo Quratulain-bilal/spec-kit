@@ -918,6 +918,9 @@ def extension_add(
                         f"{_escape_markup(str(e))}"
                     )
                     raise typer.Exit(1)
+                finally:
+                    # Clean up downloaded ZIP
+                    zip_path.unlink(missing_ok=True)
 
             else:
                 # Try bundled extensions first (shipped with spec-kit)
@@ -987,8 +990,7 @@ def extension_add(
                             manifest = manager.install_from_zip(zip_path, speckit_version, priority=priority, force=force)
                         finally:
                             # Clean up downloaded ZIP
-                            if zip_path.exists():
-                                zip_path.unlink()
+                            zip_path.unlink(missing_ok=True)
 
         console.print("\n[green]✓[/green] Extension installed successfully!")
         console.print(f"\n[bold]{_escape_markup(str(manifest.name))}[/bold] (v{_escape_markup(str(manifest.version))})")
