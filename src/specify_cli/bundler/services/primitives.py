@@ -197,8 +197,7 @@ class _PresetKindManager:
             self._manager.install_from_zip(zip_path, speckit_version, priority)
         finally:
             with contextlib.suppress(Exception):
-                if zip_path.exists():
-                    zip_path.unlink()
+                zip_path.unlink(missing_ok=True)
 
     def remove(self, component: ComponentRef) -> None:
         try:
@@ -276,8 +275,7 @@ class _ExtensionKindManager:
             )
         finally:
             with contextlib.suppress(Exception):
-                if zip_path.exists():
-                    zip_path.unlink()
+                zip_path.unlink(missing_ok=True)
 
     def remove(self, component: ComponentRef) -> None:
         try:
